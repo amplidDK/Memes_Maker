@@ -1,39 +1,37 @@
-import time
-import logging
-import settings
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
+import asyncio
+import config
+import asyncpraw
+from aiogram import Bot, types
+
+API_TOKEN = config.settings['TOKEN']
+CHANNEL_ID = config.settings['CHANNEL_ID']  # channel id for sending memes
+
+bot = Bot(token=API_TOKEN, parse_mode=types.ParseMode.HTML)
+
+reddit = asyncpraw.Reddit(client_id=config.settings['CLIENT_ID'],
+                          client_secret=config.settings['SECRET_CODE'],
+                          user_agent='random_tg_bot/0.0.1')
+
+mems = []
+TIMEOUT = 600
+SUBREDDIT_NAME = 'memes'
+POST_LIMIT = 1
 
 
-logging.basicConfig(filename='bot.log', level=logging.INFO)
-
-def greet_user(update, context):
-    update.message.reply_text('С подключением %username%')
-    time.sleep(2)
-    update.message.reply_text('Хм...Простите')
-    update.message.reply_text(f'С подключением, {update.message.from_user.first_name}!')
-    update.message.reply_text('К сожалению, я могу пока только зеркалить ваши сообщения.\n'
-                              'Надеюсь скоро мой ленивый создатель соизволит что-то допилить.\n'
-                              'А пока "наслаждайтесь" тем, что есть =)')
+async def send_message(channel_id: int, text: str):
+    await bot.send_message(channel_id, text)
 
 
-def answer_user(update, context):
-    text = update.message.text
-    update.message.reply_text(text)
+async def main():
+    while True:
+        await asyncio.sleep(TIMEOUT)
+        memes_submissions = await reddit.subreddit(SUBREDDIT_NAME)
+        memes_submissions = memes_submissions.new(limit=POST_LIMIT)
+        item = await memes_submissions.__anext__()
+        if item not in mems:
+            mems.append(item.title)
+            await send_message(CHANNEL_ID, item.url)
 
-def main():
-    # Передаем ключ
-    bot = Updater(settings.API_KEY, use_context=True)
 
-    # Накидываем обработчики событий
-    disp = bot.dispatcher
-    disp.add_handler(CommandHandler('start', greet_user))
-    disp.add_handler(MessageHandler(Filters.text, answer_user))
-
-    # Отправляем бота в телегу для проверки обновлений
-    bot.start_polling()
-
-    # Запускаем бота
-    bot.idle()
-
-if __name__ == '__main__':
-    main()
+loop = asyncio.get_event_loop()
+loop.run_until_complete(main())
